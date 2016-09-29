@@ -60,8 +60,7 @@ run = do
             (liftIO (adjustResources $ resourceMarket game)) >>=
             (\rm -> put game { resourceMarket = rm })
         Turn -> 
-            put
-                game
+            put game
                 { resourceMarket = addResources
                       (resourceMarket game)
                       (resourceDelta (Map.size . accounts $ game) (phase game))
@@ -69,9 +68,7 @@ run = do
         Next -> modify nextPhase
 
 nextPhase g@Game{phase = p} = 
-    g
-    { phase = succ p
-    }
+    g { phase = succ p }
 
 adjustAccounts :: Accounts -> IO Accounts
 adjustAccounts as = do
@@ -81,34 +78,21 @@ adjustAccounts as = do
     return $ Map.adjust (+ val) name as
 
 adjustResources :: ResourceMarket -> IO ResourceMarket
-adjustResources (rm@ResourceMarket{coal = c,oil = o,garbage = g,uranium = u}) = do
+adjustResources (rm@ResourceMarket{coal = c, oil = o, garbage = g, uranium = u}) = do
     putStrLn "Select resource: coal | garbage | oil | uranium"
     resource <- getLine
-    putStrLn "Delta:"
-    delta <- getNumber
     case resource of
         "coal" -> 
-            return
-                rm
-                { coal = c - delta
-                }
+            fmap (\delta -> rm { coal = c - delta }) getDelta
         "garbage" -> 
-            return
-                rm
-                { garbage = g - delta
-                }
+            fmap (\delta -> rm { garbage = g - delta }) getDelta
         "oil" -> 
-            return
-                rm
-                { oil = o - delta
-                }
+            fmap (\delta -> rm { oil = o - delta }) getDelta
         "uranium" -> 
-            return
-                rm
-                { uranium = u - delta
-                }
+            fmap (\delta -> rm { uranium = u - delta }) getDelta
         otherwise -> error >> adjustResources rm
-            where error = putStrLn "Unrecognized resource"
+        where error = putStrLn "Unrecognized resource"
+              getDelta = putStrLn "Delta:" >> getNumber
 
 resourceDelta :: Int -> Phase -> ResourceMarket
 resourceDelta 2 PhaseOne = ResourceMarket 3 2 1 1
