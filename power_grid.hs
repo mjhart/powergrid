@@ -90,8 +90,8 @@ adjustResources (rm@ResourceMarket{coal = c, oil = o, garbage = g, uranium = u})
             fmap (\delta -> rm { oil = o - delta }) getDelta
         "uranium" -> 
             fmap (\delta -> rm { uranium = u - delta }) getDelta
-        otherwise -> error >> adjustResources rm
-        where error = putStrLn "Unrecognized resource"
+        otherwise -> unrecognized >> adjustResources rm
+        where unrecognized = putStrLn "Unrecognized resource"
               getDelta = putStrLn "Delta:" >> getNumber
 
 resourceDelta :: Int -> Phase -> ResourceMarket
@@ -121,17 +121,12 @@ addResources rm1 rm2 =
     }
 
 -- Set up stuff -- 
-setUp
-    :: IO Accounts
+setUp :: IO Accounts
 setUp = do
     putStrLn "Hi! Welcome to gbank. How many players will be playing today?"
     n <- getNumber
-    fmap
-        (foldr
-             (\k -> 
-                   Map.insert k 0)
-             Map.empty)
-        (getNames n)
+    fmap buildMap (getNames n)
+    where buildMap = foldr (\k -> Map.insert k 0) Map.empty
 
 initialResourceMarket :: ResourceMarket
 initialResourceMarket = 
@@ -176,7 +171,7 @@ getCommand = do
 
 getNumber :: IO Int
 getNumber = do
-    maybeNum <- getMaybeInt
+    maybeNum <- fmap Read.readMaybe getLine
     case maybeNum of
         Just n -> return n
         Nothing -> putStrLn "Not a number. Please try again" >> getNumber
