@@ -66,9 +66,7 @@ run = do
                       (resourceDelta (Map.size . accounts $ game) (phase game))
                 }
         Next -> modify nextPhase
-
-nextPhase g@Game{phase = p} = 
-    g { phase = succ p }
+        where nextPhase g@Game{phase = p} = g { phase = succ p }
 
 adjustAccounts :: Accounts -> IO Accounts
 adjustAccounts as = do
@@ -82,13 +80,13 @@ adjustResources (rm@ResourceMarket{coal = c, oil = o, garbage = g, uranium = u})
     putStrLn "Select resource: coal | garbage | oil | uranium"
     resource <- getLine
     case resource of
-        "coal" -> 
+        "coal" ->
             fmap (\delta -> rm { coal = c - delta }) getDelta
-        "garbage" -> 
+        "garbage" ->
             fmap (\delta -> rm { garbage = g - delta }) getDelta
-        "oil" -> 
+        "oil" ->
             fmap (\delta -> rm { oil = o - delta }) getDelta
-        "uranium" -> 
+        "uranium" ->
             fmap (\delta -> rm { uranium = u - delta }) getDelta
         otherwise -> unrecognized >> adjustResources rm
         where unrecognized = putStrLn "Unrecognized resource"
@@ -150,24 +148,21 @@ getNames n =
         else return []
 
 getName :: IO Name
-getName = do
-    putStrLn "Player name:"
-    name <- getLine
-    if null name
-        then putStrLn "Name cannot be empty" >> getName
-        else return name
+getName = getPlayerInput
+    "Player name:"
+    "Name cannot be empty"
+    (\name -> if null name then Nothing else Just name)
 
 getCommand :: IO Command
-getCommand = do
-    putStrLn "Enter command: money | resources | next | turn"
-    command <- getLine
-    case command of
-        "money" -> return Money
-        "resources" -> return Resources
-        "next" -> return Next
-        "turn" -> return Turn
-        otherwise -> error >> getCommand
-            where error = putStrLn "Unrecognized command"
+getCommand = getPlayerInput 
+    "Enter command: money | resources | next | turn"
+    "Unrecognized command"
+    parse
+    where parse "money" = Just Money
+          parse "resources" = Just Resources
+          parse "next" = Just Next
+          parse "turn" = Just Turn
+          _ = Nothing
 
 getNumber :: IO Int
 getNumber = do
@@ -176,5 +171,10 @@ getNumber = do
         Just n -> return n
         Nothing -> putStrLn "Not a number. Please try again" >> getNumber
 
-getMaybeInt :: IO (Maybe Int)
-getMaybeInt = fmap Read.readMaybe getLine
+getPlayerInput :: String -> String -> (String -> Maybe a) ->  IO a
+getPlayerInput prompt errorMsg parse = do
+    putStrLn prompt
+    input <- fmap parse getLine
+    case input of
+        Just value -> return value
+        Nothing -> putStrLn errorMsg >> getPlayerInput prompt errorMsg parse
