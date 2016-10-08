@@ -76,21 +76,22 @@ adjustAccounts as = do
     return $ Map.adjust (+ val) name as
 
 adjustResources :: ResourceMarket -> IO ResourceMarket
-adjustResources (rm@ResourceMarket{coal = c, oil = o, garbage = g, uranium = u}) = do
-    putStrLn "Select resource: coal | garbage | oil | uranium"
-    resource <- getLine
-    case resource of
-        "coal" ->
-            fmap (\delta -> rm { coal = c - delta }) getDelta
-        "garbage" ->
-            fmap (\delta -> rm { garbage = g - delta }) getDelta
-        "oil" ->
-            fmap (\delta -> rm { oil = o - delta }) getDelta
-        "uranium" ->
-            fmap (\delta -> rm { uranium = u - delta }) getDelta
-        otherwise -> unrecognized >> adjustResources rm
-        where unrecognized = putStrLn "Unrecognized resource"
-              getDelta = putStrLn "Delta:" >> getNumber
+adjustResources rm = (getPlayerInput
+    "Select resource: coal | garbage | oil | uranium"
+    "Unrecognized resource"
+    parseResource) <*> pure rm <*> getDelta
+    where getDelta = putStrLn "Delta:" >> getNumber
+
+parseResource :: String -> Maybe (ResourceMarket -> Int -> ResourceMarket)
+parseResource "coal" =
+    Just (\rm@ResourceMarket { coal = c } delta -> rm { coal = c - delta })
+parseResource "garbage" =
+    Just (\rm@ResourceMarket { garbage = g } delta -> rm { garbage = g - delta })
+parseResource "oil" =
+    Just (\rm@ResourceMarket { oil = o } delta -> rm { oil = o - delta })
+parseResource "uranium" =
+    Just (\rm@ResourceMarket { uranium = u } delta -> rm { uranium = u - delta })
+parseResource _ = Nothing
 
 resourceDelta :: Int -> Phase -> ResourceMarket
 resourceDelta 2 PhaseOne = ResourceMarket 3 2 1 1
