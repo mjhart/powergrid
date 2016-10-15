@@ -136,7 +136,7 @@ getName = getPlayerInput
     (\name -> if null name then Nothing else Just name)
 
 getCommand :: IO (Game -> Game)
-getCommand' = join $ getPlayerInput
+getCommand = join $ getPlayerInput
             "Enter command: money | resources | turn | phase"
             "Unrecognized command"
             parseCommand
@@ -149,7 +149,9 @@ parseCommand "resources" = Just $ do
     delta <- adjustResources
     return (\g -> g { resourceMarket = delta $ resourceMarket g })
 parseCommand "turn" = Just $ return nextTurn
-    where nextTurn g = g { resourceMarket = addResources (resourceMarket g) (resourceDelta (Map.size . accounts $ g) (phase g)) }
+    where nextTurn g = g { resourceMarket = addResources 
+        (resourceMarket g)
+        (resourceDelta (Map.size . accounts $ g) (phase g)) }
 parseCommand "phase" = Just $ return nextPhase
     where nextPhase g = g { phase = succ $ phase g }
 parseCommand _ = Nothing
