@@ -51,46 +51,31 @@ run :: StateT Game IO ()
 run = do
     game <- get
     liftIO . putStrLn $ show game
-    command <- liftIO getCommand
-    case command of
-        Money -> 
-            (liftIO (adjustAccounts $ accounts game)) >>=
-            (\as -> put game { accounts = as })
-        Resources -> 
-            (liftIO (adjustResources $ resourceMarket game)) >>=
-            (\rm -> put game { resourceMarket = rm })
-        Turn -> 
-            put game
-                { resourceMarket = addResources
-                      (resourceMarket game)
-                      (resourceDelta (Map.size . accounts $ game) (phase game))
-                }
-        Next -> modify nextPhase
-        where nextPhase g@Game{phase = p} = g { phase = succ p }
+    liftIO getCommand >>= modify
 
-adjustAccounts :: Accounts -> IO Accounts
-adjustAccounts as = do
+adjustAccounts :: IO (Accounts -> Accounts)
+adjustAccounts = do
     name <- getName
     putStrLn "Delta:"
     val <- getNumber
-    return $ Map.adjust (+ val) name as
+    return $ Map.adjust (+ val) name
 
-adjustResources :: ResourceMarket -> IO ResourceMarket
-adjustResources rm = (getPlayerInput
+adjustResources :: IO (ResourceMarket -> ResourceMarket)
+adjustResources = (getPlayerInput
     "Select resource: coal | garbage | oil | uranium"
     "Unrecognized resource"
-    parseResource) <*> pure rm <*> getDelta
+    parseResource) <*> getDelta
     where getDelta = putStrLn "Delta:" >> getNumber
 
-parseResource :: String -> Maybe (ResourceMarket -> Int -> ResourceMarket)
+parseResource :: String -> Maybe (Int -> ResourceMarket-> ResourceMarket)
 parseResource "coal" =
-    Just (\rm@ResourceMarket { coal = c } delta -> rm { coal = c - delta })
+    Just (\delta rm@ResourceMarket { coal = c } -> rm { coal = c - delta })
 parseResource "garbage" =
-    Just (\rm@ResourceMarket { garbage = g } delta -> rm { garbage = g - delta })
+    Just (\delta rm@ResourceMarket { garbage = g } -> rm { garbage = g - delta })
 parseResource "oil" =
-    Just (\rm@ResourceMarket { oil = o } delta -> rm { oil = o - delta })
+    Just (\delta rm@ResourceMarket { oil = o } -> rm { oil = o - delta })
 parseResource "uranium" =
-    Just (\rm@ResourceMarket { uranium = u } delta -> rm { uranium = u - delta })
+    Just (\delta rm@ResourceMarket { uranium = u } -> rm { uranium = u - delta })
 parseResource _ = Nothing
 
 resourceDelta :: Int -> Phase -> ResourceMarket
@@ -119,7 +104,7 @@ addResources rm1 rm2 =
     , uranium = (uranium rm1) + (uranium rm2)
     }
 
--- Set up stuff -- 
+-- Set up stuff --
 setUp :: IO Accounts
 setUp = do
     putStrLn "Hi! Welcome to gbank. How many players will be playing today?"
@@ -127,17 +112,13 @@ setUp = do
     fmap buildMap (getNames n)
     where buildMap = foldr (\k -> Map.insert k 0) Map.empty
 
-initialResourceMarket :: ResourceMarket
-initialResourceMarket = 
-    ResourceMarket
-    { coal = 24
-    , oil = 18
-    , garbage = 6
-    , uranium = 2
-    }
-
 initialGame :: Accounts -> Game
 initialGame accounts = Game accounts PhaseOne initialResourceMarket
+    where initialResourceMarket = ResourceMarket { coal = 24
+        , oil = 18
+        , garbage = 6
+        , uranium = 2
+        }
 
 getNames :: Int -> IO [Name]
 getNames n = 
@@ -154,16 +135,24 @@ getName = getPlayerInput
     "Name cannot be empty"
     (\name -> if null name then Nothing else Just name)
 
-getCommand :: IO Command
-getCommand = getPlayerInput 
-    "Enter command: money | resources | next | turn"
-    "Unrecognized command"
-    parse
-    where parse "money" = Just Money
-          parse "resources" = Just Resources
-          parse "next" = Just Next
-          parse "turn" = Just Turn
-          _ = Nothing
+getCommand :: IO (Game -> Game)
+getCommand' = join $ getPlayerInput
+            "Enter command: money | resources | turn | phase"
+            "Unrecognized command"
+            parseCommand
+
+parseCommand :: String -> Maybe (IO (Game -> Game))
+parseCommand "money" = Just $ do
+    delta <- adjustAccounts
+    return (\g -> g { accounts = delta $ accounts g })
+parseCommand "resources" = Just $ do
+    delta <- adjustResources
+    return (\g -> g { resourceMarket = delta $ resourceMarket g })
+parseCommand "turn" = Just $ return nextTurn
+    where nextTurn g = g { resourceMarket = addResources (resourceMarket g) (resourceDelta (Map.size . accounts $ g) (phase g)) }
+parseCommand "phase" = Just $ return nextPhase
+    where nextPhase g = g { phase = succ $ phase g }
+parseCommand _ = Nothing
 
 getNumber :: IO Int
 getNumber = do
