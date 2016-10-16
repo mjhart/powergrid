@@ -1,8 +1,13 @@
-module Gbank where
+{-# LANGUAGE TemplateHaskell #-}
+
+module Powergrid where
 
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.State.Lazy
+import Lens.Micro
+import Lens.Micro.TH
+import Lens.Micro.Extras
 import qualified Data.Map as Map
 import qualified Text.Read as Read
 
@@ -31,17 +36,20 @@ data Phase
     deriving (Show,Enum)
 
 data ResourceMarket = ResourceMarket
-    { coal :: Int
-    , oil :: Int
-    , garbage :: Int
-    , uranium :: Int
+    { _coal :: Int
+    , _oil :: Int
+    , _garbage :: Int
+    , _uranium :: Int
     } deriving (Show)
 
 data Game = Game
-    { accounts :: Accounts
-    , phase :: Phase
-    , resourceMarket :: ResourceMarket
+    { _accounts :: Accounts
+    , _phase :: Phase
+    , _resourceMarket :: ResourceMarket
     } deriving (Show)
+
+makeLenses ''Game
+makeLenses ''ResourceMarket
 
 main = do
     accounts <- setUp
@@ -68,14 +76,10 @@ adjustResources = (getPlayerInput
     where getDelta = putStrLn "Delta:" >> getNumber
 
 parseResource :: String -> Maybe (Int -> ResourceMarket-> ResourceMarket)
-parseResource "coal" =
-    Just (\delta rm@ResourceMarket { coal = c } -> rm { coal = c - delta })
-parseResource "garbage" =
-    Just (\delta rm@ResourceMarket { garbage = g } -> rm { garbage = g - delta })
-parseResource "oil" =
-    Just (\delta rm@ResourceMarket { oil = o } -> rm { oil = o - delta })
-parseResource "uranium" =
-    Just (\delta rm@ResourceMarket { uranium = u } -> rm { uranium = u - delta })
+parseResource "coal" = Just $ (over coal) . (-)
+parseResource "garbage" = Just $ (over garbage) . (-)
+parseResource "oil" = Just $ (over oil) . (-)
+parseResource "uranium" = Just $ (over uranium) . (-)
 parseResource _ = Nothing
 
 resourceDelta :: Int -> Phase -> ResourceMarket
@@ -96,12 +100,12 @@ resourceDelta 6 PhaseTwo = ResourceMarket 9 6 5 3
 resourceDelta 6 PhaseThree = ResourceMarket 6 7 6 3
 
 addResources :: ResourceMarket -> ResourceMarket -> ResourceMarket
-addResources rm1 rm2 = 
+addResources rm1 rm2 =
     ResourceMarket
-    { coal = (coal rm1) + (coal rm2)
-    , oil = (oil rm1) + (oil rm2)
-    , garbage = (garbage rm1) + (garbage rm2)
-    , uranium = (uranium rm1) + (uranium rm2)
+    { _coal = (_coal rm1) + (_coal rm2)
+    , _oil = (_oil rm1) + (_oil rm2)
+    , _garbage = (_garbage rm1) + (_garbage rm2)
+    , _uranium = (_uranium rm1) + (_uranium rm2)
     }
 
 -- Set up stuff --
@@ -114,10 +118,10 @@ setUp = do
 
 initialGame :: Accounts -> Game
 initialGame accounts = Game accounts PhaseOne initialResourceMarket
-    where initialResourceMarket = ResourceMarket { coal = 24
-        , oil = 18
-        , garbage = 6
-        , uranium = 2
+    where initialResourceMarket = ResourceMarket { _coal = 24
+        , _oil = 18
+        , _garbage = 6
+        , _uranium = 2
         }
 
 getNames :: Int -> IO [Name]
@@ -142,18 +146,11 @@ getCommand = join $ getPlayerInput
             parseCommand
 
 parseCommand :: String -> Maybe (IO (Game -> Game))
-parseCommand "money" = Just $ do
-    delta <- adjustAccounts
-    return (\g -> g { accounts = delta $ accounts g })
-parseCommand "resources" = Just $ do
-    delta <- adjustResources
-    return (\g -> g { resourceMarket = delta $ resourceMarket g })
+parseCommand "money" = Just $ fmap (over accounts) adjustAccounts
+parseCommand "resources" = Just $ fmap (over resourceMarket) adjustResources
 parseCommand "turn" = Just $ return nextTurn
-    where nextTurn g = g { resourceMarket = addResources 
-        (resourceMarket g)
-        (resourceDelta (Map.size . accounts $ g) (phase g)) }
-parseCommand "phase" = Just $ return nextPhase
-    where nextPhase g = g { phase = succ $ phase g }
+    where nextTurn g = ((over resourceMarket) $ addResources (resourceDelta (Map.size . _accounts $ g) (_phase g))) g
+parseCommand "phase" = Just . return . (over phase) $ succ
 parseCommand _ = Nothing
 
 getNumber :: IO Int
