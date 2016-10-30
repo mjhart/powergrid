@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Powergrid where
 
@@ -8,8 +9,13 @@ import Control.Monad.Trans.State.Lazy
 import Lens.Micro
 import Lens.Micro.TH
 import Lens.Micro.Extras
+import Data.Foldable
+import Data.List
 import qualified Data.Map as Map
 import qualified Text.Read as Read
+
+class Printable a where
+    prettyPrint :: a -> String
 
 type Name = String
 
@@ -51,6 +57,24 @@ data Game = Game
 makeLenses ''Game
 makeLenses ''ResourceMarket
 
+instance Printable Phase where
+    prettyPrint = show
+
+instance Printable ResourceMarket where
+    prettyPrint rm =
+        let values = fmap (\l -> show . (view l) $ rm) lenses
+        in unwords $ zipWith (++) labels values 
+            where labels = ["Coal: ", "Garbage: ", "Oil: ", "Uranum: "]
+                  lenses = [coal, garbage, oil, uranium]
+
+instance Printable (Map.Map Name Balance) where
+    prettyPrint = unwords . fmap printEntry . Map.toList
+        where printEntry (name, bal) = name ++ ": " ++ (show bal)
+
+instance Printable Game where
+    prettyPrint game = unlines [printPart phase, printPart resourceMarket, printPart accounts]
+        where printPart lens = prettyPrint $ view lens game
+
 main = do
     accounts <- setUp
     runStateT (forever run) $ initialGame accounts
@@ -58,7 +82,7 @@ main = do
 run :: StateT Game IO ()
 run = do
     game <- get
-    liftIO . putStrLn $ show game
+    liftIO . putStrLn $ prettyPrint game
     liftIO getCommand >>= modify
 
 adjustAccounts :: IO (Accounts -> Accounts)
@@ -76,10 +100,10 @@ adjustResources = (getPlayerInput
     where getDelta = putStrLn "Delta:" >> getNumber
 
 parseResource :: String -> Maybe (Int -> ResourceMarket-> ResourceMarket)
-parseResource "coal" = Just $ (over coal) . (-)
-parseResource "garbage" = Just $ (over garbage) . (-)
-parseResource "oil" = Just $ (over oil) . (-)
-parseResource "uranium" = Just $ (over uranium) . (-)
+parseResource "coal" = Just $ (over coal) . flip (-)
+parseResource "garbage" = Just $ (over garbage) . flip (-)
+parseResource "oil" = Just $ (over oil) . flip (-)
+parseResource "uranium" = Just $ (over uranium) . flip (-)
 parseResource _ = Nothing
 
 resourceDelta :: Int -> Phase -> ResourceMarket
