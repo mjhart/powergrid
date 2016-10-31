@@ -73,7 +73,8 @@ instance Printable (Map.Map Name Balance) where
 
 instance Printable Game where
     prettyPrint game = unlines [printPart phase, printPart resourceMarket, printPart accounts]
-        where printPart lens = prettyPrint $ view lens game
+        where printPart :: (Printable p) => Getting p Game p -> String
+              printPart = prettyPrint . (flip view game)
 
 main = do
     accounts <- setUp
