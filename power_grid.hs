@@ -173,7 +173,10 @@ parseCommand :: String -> Maybe (IO (Game -> Game))
 parseCommand "money" = Just $ fmap (over accounts) adjustAccounts
 parseCommand "resources" = Just $ fmap (over resourceMarket) adjustResources
 parseCommand "turn" = Just $ return nextTurn
-    where nextTurn g = ((over resourceMarket) $ addResources (resourceDelta (Map.size . _accounts $ g) (_phase g))) g
+    where nextTurn g = let numPlayers = Map.size . view accounts $ g
+                           curPhase = view phase g
+                           delta = resourceDelta numPlayers curPhase
+                       in (over resourceMarket) (addResources delta) g
 parseCommand "phase" = Just . return . (over phase) $ succ
 parseCommand _ = Nothing
 
