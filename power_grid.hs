@@ -84,27 +84,31 @@ run :: StateT Game IO ()
 run = do
     game <- get
     liftIO . putStrLn $ prettyPrint game
-    liftIO getCommand >>= modify
+    newGame <- liftIO $ getCommand game
+    put newGame
 
-adjustAccounts :: IO (Accounts -> Accounts)
-adjustAccounts = do
+adjustAccounts :: Accounts -> IO Accounts
+adjustAccounts as = do
     name <- getName
     putStrLn "Delta:"
     val <- getNumber
-    return $ Map.adjust (+ val) name
+    return $ Map.adjust (+ val) name as
 
-adjustResources :: IO (ResourceMarket -> ResourceMarket)
-adjustResources = (getPlayerInput
-    "Select resource: coal | garbage | oil | uranium"
-    "Unrecognized resource"
-    parseResource) <*> getDelta
-    where getDelta = putStrLn "Delta:" >> getNumber
+adjustResources :: ResourceMarket -> IO ResourceMarket
+adjustResources rm = do
+    resource <- getPlayerInput
+        "Select resource: coal | garbage | oil | uranium"
+        "Unrecognized resource"
+        parseResource
+    putStrLn "Delta:"
+    delta <- getNumber
+    return . (over resource) (flip (-) delta) $ rm
 
-parseResource :: String -> Maybe (Int -> ResourceMarket-> ResourceMarket)
-parseResource "coal" = Just $ (over coal) . flip (-)
-parseResource "garbage" = Just $ (over garbage) . flip (-)
-parseResource "oil" = Just $ (over oil) . flip (-)
-parseResource "uranium" = Just $ (over uranium) . flip (-)
+--parseResource :: String -> Maybe (Int -> ResourceMarket-> ResourceMarket)
+parseResource "coal" = Just coal
+parseResource "garbage" = Just garbage
+parseResource "oil" = Just oil
+parseResource "uranium" = Just uranium
 parseResource _ = Nothing
 
 resourceDelta :: Int -> Phase -> ResourceMarket
@@ -164,21 +168,33 @@ getName = getPlayerInput
     "Name cannot be empty"
     (\name -> if null name then Nothing else Just name)
 
-getCommand :: IO (Game -> Game)
-getCommand = join $ getPlayerInput
-            "Enter command: money | resources | turn | phase"
-            "Unrecognized command"
-            parseCommand
+getCommand :: Game -> IO Game
+getCommand g = do
+    command <- getPlayerInput
+        "Enter command: money | resources | turn | phase"
+        "Unrecognized command"
+        parseCommand
+    command g
 
-parseCommand :: String -> Maybe (IO (Game -> Game))
-parseCommand "money" = Just $ fmap (over accounts) adjustAccounts
-parseCommand "resources" = Just $ fmap (over resourceMarket) adjustResources
-parseCommand "turn" = Just $ return nextTurn
-    where nextTurn g = let numPlayers = Map.size . view accounts $ g
-                           curPhase = view phase g
-                           delta = resourceDelta numPlayers curPhase
-                       in (over resourceMarket) (addResources delta) g
-parseCommand "phase" = Just . return . (over phase) $ succ
+
+parseCommand :: String -> Maybe (Game -> IO Game)
+parseCommand "money" = Just (\g -> do 
+    as <- adjustAccounts (view accounts g)
+    return $ set accounts as g)
+parseCommand "resources" = Just (\g -> do 
+    rm <- adjustResources (view resourceMarket g)
+    return $ set resourceMarket rm g)
+--parseCommand "turn" = Just $ return
+--    (\g -> let numPlayers = Map.size . view accounts $ g
+--               curPhase = view phase g
+--               delta = resourceDelta numPlayers curPhase
+--           in (over resourceMarket) (addResources delta) g)
+parseCommand "turn" = Just $
+    (\g -> let numPlayers = Map.size . view accounts $ g
+               curPhase = view phase g
+               delta = resourceDelta numPlayers curPhase
+           in return . over resourceMarket (addResources delta) $ g)
+parseCommand "phase" = Just $ return . over phase succ
 parseCommand _ = Nothing
 
 getNumber :: IO Int
