@@ -89,10 +89,18 @@ run = do
 
 adjustAccounts :: Accounts -> IO Accounts
 adjustAccounts as = do
-    name <- getName
+    name <- chooseName $ Map.keys as
     putStrLn "Delta:"
     val <- getNumber
     return $ Map.adjust (+ val) name as
+
+chooseName :: [Name] -> IO Name
+chooseName names = getPlayerInput
+    "Choose Player:"
+    errMsg
+    (\name -> if name `elem` names then Just name else Nothing)
+        where errMsg = "Player must be one of: " ++ (unwords names)
+
 
 adjustResources :: ResourceMarket -> IO ResourceMarket
 adjustResources rm = do
@@ -104,7 +112,7 @@ adjustResources rm = do
     delta <- getNumber
     return . (over resource) (flip (-) delta) $ rm
 
---parseResource :: String -> Maybe (Int -> ResourceMarket-> ResourceMarket)
+parseResource :: String -> Maybe (ASetter ResourceMarket ResourceMarket Int Int)
 parseResource "coal" = Just coal
 parseResource "garbage" = Just garbage
 parseResource "oil" = Just oil
@@ -184,18 +192,16 @@ parseCommand "money" = Just (\g -> do
 parseCommand "resources" = Just (\g -> do 
     rm <- adjustResources (view resourceMarket g)
     return $ set resourceMarket rm g)
---parseCommand "turn" = Just $ return
---    (\g -> let numPlayers = Map.size . view accounts $ g
---               curPhase = view phase g
---               delta = resourceDelta numPlayers curPhase
---           in (over resourceMarket) (addResources delta) g)
-parseCommand "turn" = Just $
-    (\g -> let numPlayers = Map.size . view accounts $ g
-               curPhase = view phase g
-               delta = resourceDelta numPlayers curPhase
-           in return . over resourceMarket (addResources delta) $ g)
+parseCommand "turn" = Just $ return . nextTurn
 parseCommand "phase" = Just $ return . over phase succ
 parseCommand _ = Nothing
+
+nextTurn :: Game -> Game
+nextTurn g =
+    let numPlayers = Map.size . view accounts $ g
+        curPhase = view phase g
+        delta = resourceDelta numPlayers curPhase
+    in over resourceMarket (addResources delta) g
 
 getNumber :: IO Int
 getNumber = do
